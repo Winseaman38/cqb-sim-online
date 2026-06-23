@@ -31,17 +31,22 @@ const NETWORK = (() => {
   }
 
   function openSocket() {
-    ws = new WebSocket(getWsUrl());
+    const url = getWsUrl();
+    if (window.DEBUGLOG) DEBUGLOG('Opening WebSocket to ' + url, 'send');
+    ws = new WebSocket(url);
 
     ws.onopen = () => {
       connected = true;
       reconnectAttempts = 0;
+      if (window.DEBUGLOG) DEBUGLOG('WS OPEN (connected=true)', 'recv');
       // Re-announce ourselves to the room if this was a reconnect after
       // already being in a room (rather than the very first connection).
       if (roomCode && window.UI) {
         UI.toast('Reconnected to server', 'info');
+        if (window.DEBUGLOG) DEBUGLOG('Re-sending join_room for ' + roomCode + ' (reconnect)', 'send');
         send({ type: 'join_room', roomCode });
       } else if (onOpenCallbackRef) {
+        if (window.DEBUGLOG) DEBUGLOG('Calling initial onOpen callback', 'send');
         onOpenCallbackRef();
       }
     };
@@ -51,13 +56,16 @@ const NETWORK = (() => {
       try {
         msg = JSON.parse(event.data);
       } catch (e) {
+        if (window.DEBUGLOG) DEBUGLOG('FAILED TO PARSE MESSAGE: ' + event.data, 'err');
         return;
       }
+      if (window.DEBUGLOG) DEBUGLOG('RECV: ' + msg.type + ' ' + JSON.stringify(msg).slice(0, 120), 'recv');
       handleMessage(msg);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       connected = false;
+      if (window.DEBUGLOG) DEBUGLOG('WS CLOSED code=' + ev.code + ' reason=' + ev.reason, 'err');
       if (intentionalDisconnect) return;
       // Render and most free-tier hosts can drop idle/cold-starting
       // connections; retry with exponential backoff instead of giving up
@@ -66,7 +74,8 @@ const NETWORK = (() => {
       scheduleReconnect();
     };
 
-    ws.onerror = () => {
+    ws.onerror = (ev) => {
+      if (window.DEBUGLOG) DEBUGLOG('WS ERROR event fired', 'err');
       // onclose will fire right after this in virtually all browsers, so
       // the actual retry scheduling happens there -- this just informs the
       // player something is wrong if it's taking a while.
@@ -148,6 +157,14 @@ const NETWORK = (() => {
   function send(obj) {
     if (ws && connected) {
       ws.send(JSON.stringify(obj));
+      if (window.DEBUGLOG && obj.type !== 'unit_move') {
+        // unit_move fires very frequently during movement; logging every
+        // single one would flood the on-screen feed, so we log those
+        // separately at a lower frequency inside sendUnitMove instead.
+        DEBUGLOG('SEND: ' + obj.type + ' ' + JSON.stringify(obj).slice(0, 120), 'send');
+      }
+    } else {
+      if (window.DEBUGLOG) DEBUGLOG('SEND BLOCKED (not connected): ' + obj.type + ' -- ws=' + (!!ws) + ' connected=' + connected, 'err');
     }
   }
 
@@ -173,10 +190,15 @@ const NETWORK = (() => {
     send({ type: 'units_sync', units: lightweight });
   }
 
+  let lastMoveLogTime = 0;
   function sendUnitMove(unitId, x, z, aimAngle, status) {
     const now = performance.now();
     if (now - lastMoveSendTime < MOVE_SEND_INTERVAL_MS) return;
     lastMoveSendTime = now;
+    if (window.DEBUGLOG && now - lastMoveLogTime > 1000) {
+      lastMoveLogTime = now;
+      DEBUGLOG('SEND unit_move (sampled 1/sec): ' + unitId + ' x=' + x.toFixed(2) + ' z=' + z.toFixed(2), 'send');
+    }
     send({ type: 'unit_move', unitId, x, z, aimAngle, status });
   }
 

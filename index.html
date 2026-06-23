@@ -393,14 +393,23 @@
   /* ===== DEBUG PANEL (temporary diagnostics, visible on screen) ===== */
   #debug-panel {
     position: absolute; bottom: 36px; right: 10px; z-index: 999;
-    background: rgba(0,0,0,0.9); border: 1px solid #fbbf24; border-radius: 3px;
+    background: rgba(0,0,0,0.92); border: 1px solid #fbbf24; border-radius: 3px;
     padding: 10px 12px; font-size: 10.5px; line-height: 1.6; color: #fbbf24;
-    font-family: var(--font-mono); max-width: 280px; display: none;
+    font-family: var(--font-mono); max-width: 340px; display: none;
   }
   #debug-panel.visible { display: block; }
   #debug-panel .debug-title { color: #fff; font-weight: bold; margin-bottom: 4px; letter-spacing: 1px; }
   #debug-panel .debug-row { display: flex; justify-content: space-between; gap: 8px; }
   #debug-panel .debug-row span:last-child { color: #fff; }
+  #debug-log {
+    margin-top: 8px; padding-top: 6px; border-top: 1px solid #555;
+    max-height: 160px; overflow-y: auto; font-size: 9.5px; color: #9ca3af;
+    display: flex; flex-direction: column-reverse;
+  }
+  #debug-log .log-line { padding: 1px 0; border-bottom: 1px solid #222; word-break: break-all; }
+  #debug-log .log-line.log-send { color: #4ade80; }
+  #debug-log .log-line.log-recv { color: #38bdf8; }
+  #debug-log .log-line.log-err { color: #ef4444; }
   #room-badge .copy-btn { cursor: pointer; color: var(--steel-light); font-size: 10px; border: 1px solid var(--grid-line); padding: 2px 6px; border-radius: 2px; }
   #room-badge .copy-btn:hover { color: var(--phosphor); border-color: var(--phosphor-dim); }
 </style>
@@ -445,6 +454,7 @@
     <div class="debug-row"><span>WS Connected:</span><span id="dbg-connected">-</span></div>
     <div class="debug-row"><span>Local Unit Count:</span><span id="dbg-unit-count">-</span></div>
     <div class="debug-row"><span>Server URL:</span><span id="dbg-server-url">-</span></div>
+    <div id="debug-log"></div>
   </div>
 
   <div id="loading-screen">
@@ -460,7 +470,7 @@
 
   <!-- TOP BAR -->
   <div id="topbar">
-    <div class="brand">CQB-SIM <span class="sub">TACTICAL TRAINING PLATFORM</span></div>
+    <div class="brand">CQB-SIM <span class="sub">TACTICAL TRAINING PLATFORM — BUILD v7</span></div>
     <div class="mode-pill" id="mode-pill">SELECTION MODE</div>
     <div class="topbar-spacer"></div>
     <button class="btn" id="btn-editor-toggle">MAP EDITOR [TAB]</button>
@@ -569,6 +579,23 @@
 
 </div>
 
+<script>
+  // Global on-screen debug logger -- writes to the #debug-log feed visible
+  // in the bottom-right debug panel, AND to the browser console, so we can
+  // see exactly what's happening on each device without needing devtools.
+  window.DEBUGLOG = function(msg, type) {
+    console.log('[CQB-DEBUG]', msg);
+    const feed = document.getElementById('debug-log');
+    if (!feed) return;
+    const line = document.createElement('div');
+    line.className = 'log-line' + (type ? ' log-' + type : '');
+    const time = new Date().toLocaleTimeString();
+    line.textContent = '[' + time + '] ' + msg;
+    feed.appendChild(line);
+    while (feed.children.length > 40) feed.removeChild(feed.firstChild);
+  };
+  console.log('[CQB-DEBUG] BUILD v7 loading...');
+</script>
 <script src="three.min.js"></script>
 <script src="network.js"></script>
 <script src="scene.js"></script>

@@ -353,6 +353,7 @@ const UNITS = (() => {
   // current state), or when one player adds/removes a unit, changes team
   // color, or applies a formation. Reconciles our local unit list to match.
   function applyRemoteUnitsSync(remoteUnits) {
+    if (window.DEBUGLOG) DEBUGLOG('applyRemoteUnitsSync: received ' + remoteUnits.length + ' units: ' + remoteUnits.map(u => u.id).join(','), 'recv');
     const myPlayerId = window.NETWORK ? NETWORK.getPlayerId() : null;
     const remoteIds = new Set(remoteUnits.map(r => r.id));
 
@@ -407,8 +408,16 @@ const UNITS = (() => {
 
   // High-frequency position updates (someone else moving their controlled unit)
   function applyRemoteUnitMove(unitId, x, z, aimAngle, status) {
-    const unit = units.find(u => u.id === unitId);
-    if (!unit) return;
+    let unit = units.find(u => u.id === unitId);
+    if (!unit) {
+      // This can happen if a unit_move arrives before we've ever received
+      // a units_sync that included this unit (e.g. message ordering during
+      // the join handshake). Previously this just silently dropped the
+      // update, which is the root cause of host/joiner unit lists drifting
+      // out of sync with each other. Create the unit on the fly instead.
+      if (window.DEBUGLOG) DEBUGLOG('applyRemoteUnitMove: unit ' + unitId + ' not found locally, creating it', 'err');
+      unit = spawnUnitAt(x, z, undefined, unitId);
+    }
     if (unit.isControlled) return; // don't fight with our own active control
     unit.x = x;
     unit.z = z;
