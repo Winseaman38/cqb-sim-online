@@ -95,6 +95,14 @@ function broadcastPlayerCount(roomCode) {
 wss.on('connection', (ws) => {
   ws.roomCode = null;
   ws.playerId = crypto.randomUUID();
+  ws.isAlive = true;
+
+  // Heartbeat: Render's infrastructure (and many proxies/load balancers in
+  // general) can silently drop idle connections. Periodically pinging each
+  // client and listening for the automatic 'pong' reply lets us detect dead
+  // connections early, and the back-and-forth traffic itself helps keep the
+  // connection from being treated as idle and getting reset.
+  ws.on('pong', () => { ws.isAlive = true; });
 
   ws.on('message', (raw) => {
     let msg;
@@ -233,6 +241,27 @@ wss.on('connection', (ws) => {
       }
     }
   });
+});
+
+// Send a ping to every connected client every 25 seconds. If a client didn't
+// answer the PREVIOUS ping with a pong (ws.isAlive still false), we assume
+// the connection is dead and close it -- this also frees up the room's
+// memory if that was the last person in it. This periodic traffic is also
+// what keeps Render's proxy from treating the connection as idle.
+const HEARTBEAT_INTERVAL_MS = 25000;
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      return;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, HEARTBEAT_INTERVAL_MS);
+
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 const PORT = process.env.PORT || 3000;
